@@ -8,7 +8,7 @@ import type {
   ProjectInfo,
   PermissionMode,
 } from "../types";
-import type { ConversationSummary } from "../../../shared/types";
+import type { ConversationSummary, ImageData, MultimodalMessage } from "../../../shared/types";
 import { useClaudeStreaming } from "../hooks/useClaudeStreaming";
 import { useChatState } from "../hooks/chat/useChatState";
 import { usePermissions } from "../hooks/chat/usePermissions";
@@ -74,6 +74,8 @@ export function ChatPage() {
     fullTitle: string;
     projectEncodedName: string;
   } | null>(null);
+  // State for uploaded images
+  const [uploadedImages, setUploadedImages] = useState<ImageData[]>([]);
 
   // Extract and normalize working directory from URL
   const workingDirectory = (() => {
@@ -206,9 +208,22 @@ export function ChatPage() {
       overridePermissionMode?: PermissionMode,
     ) => {
       const content = messageContent || input.trim();
-      if (!content || isLoading) return;
+      if ((!content && uploadedImages.length === 0) || isLoading) return;
 
       const requestId = generateRequestId();
+
+      // Prepare message payload - either string or multimodal
+      let messagePayload: string | MultimodalMessage;
+      if (uploadedImages.length > 0 && !messageContent) {
+        // Create multimodal message with images
+        messagePayload = {
+          text: content,
+          images: uploadedImages
+        };
+      } else {
+        // Regular text-only message
+        messagePayload = content;
+      }
 
       // Only add user message to chat if not hidden
       if (!hideUserMessage) {
@@ -217,11 +232,16 @@ export function ChatPage() {
           role: "user",
           content: content,
           timestamp: Date.now(),
+          // Include images if this is a multimodal message
+          ...(uploadedImages.length > 0 && !messageContent ? { images: uploadedImages } : {}),
         };
         addMessage(userMessage);
       }
 
-      if (!messageContent) clearInput();
+      if (!messageContent) {
+        clearInput();
+        setUploadedImages([]); // Clear images after sending
+      }
       startRequest();
 
       try {
@@ -229,7 +249,7 @@ export function ChatPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            message: content,
+            message: messagePayload,
             requestId,
             ...(currentSessionId ? { sessionId: currentSessionId } : {}),
             allowedTools: tools || allowedTools,
@@ -317,6 +337,8 @@ export function ChatPage() {
       processStreamLine,
       handlePermissionError,
       createAbortHandler,
+      uploadedImages,
+      setUploadedImages,
     ],
   );
 
@@ -711,6 +733,8 @@ export function ChatPage() {
               showPermissions={isPermissionMode}
               permissionData={permissionData}
               planPermissionData={planPermissionData}
+              images={uploadedImages}
+              onImagesChange={setUploadedImages}
             />
           </>
         )}
