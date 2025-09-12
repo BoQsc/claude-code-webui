@@ -2,6 +2,11 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import type { AllMessage, ChatMessage } from "../../types";
 import { generateId } from "../../utils/id";
 
+// Constants for message management
+const MAX_MESSAGES = 500; // Maximum messages to keep in memory
+const CLEANUP_THRESHOLD = 600; // Start cleanup when this many messages
+const MESSAGES_TO_KEEP = 400; // Keep this many messages after cleanup
+
 interface ChatStateOptions {
   initialMessages?: AllMessage[];
   initialSessionId?: string;
@@ -42,9 +47,25 @@ export function useChatState(options: ChatStateOptions = {}) {
     setCurrentSessionId(initialSessionId);
   }, [initialSessionId]);
 
-  const addMessage = useCallback((msg: AllMessage) => {
-    setMessages((prev) => [...prev, msg]);
+  // Message cleanup function to prevent memory growth
+  const cleanupMessages = useCallback((messages: AllMessage[]) => {
+    if (messages.length <= CLEANUP_THRESHOLD) {
+      return messages;
+    }
+
+    // Keep the most recent messages, prioritizing important message types
+    const recentMessages = messages.slice(-MESSAGES_TO_KEEP);
+    console.log(`[ChatState] Cleaned up messages: ${messages.length} -> ${recentMessages.length}`);
+    return recentMessages;
   }, []);
+
+  const addMessage = useCallback((msg: AllMessage) => {
+    setMessages((prev) => {
+      const newMessages = [...prev, msg];
+      // Cleanup if we exceed the threshold
+      return cleanupMessages(newMessages);
+    });
+  }, [cleanupMessages]);
 
   const updateLastMessage = useCallback((content: string) => {
     setMessages((prev) =>

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useEffect } from "react";
 import type {
   StreamResponse,
   SDKMessage,
@@ -16,6 +16,7 @@ import {
   UnifiedMessageProcessor,
   type ProcessingContext,
 } from "../../utils/UnifiedMessageProcessor";
+import { useDebouncedStreamProcessing } from "./useDebouncedStreamProcessing";
 
 export function useStreamParser() {
   // Create a single unified processor instance
@@ -93,38 +94,63 @@ export function useStreamParser() {
     [processor, adaptContext],
   );
 
-  const processStreamLine = useCallback(
-    (line: string, context: StreamingContext) => {
-      try {
-        const data: StreamResponse = JSON.parse(line);
+  // Batch stream processing function
+  const processBatchedLines = useCallback(
+    (lines: string[], context: StreamingContext) => {
+      for (const line of lines) {
+        try {
+          const data: StreamResponse = JSON.parse(line);
 
-        if (data.type === "claude_json" && data.data) {
-          // data.data is already an SDKMessage object, no need to parse
-          const claudeData = data.data as SDKMessage;
-          processClaudeData(claudeData, context);
-        } else if (data.type === "error") {
-          const errorMessage: SystemMessage = {
-            type: "error",
-            subtype: "stream_error",
-            message: data.error || "Unknown error",
-            timestamp: Date.now(),
-          };
-          context.addMessage(errorMessage);
-        } else if (data.type === "aborted") {
-          const abortedMessage: AbortMessage = {
-            type: "system",
-            subtype: "abort",
-            message: "Operation was aborted by user",
-            timestamp: Date.now(),
-          };
-          context.addMessage(abortedMessage);
-          context.setCurrentAssistantMessage(null);
+          if (data.type === "claude_json" && data.data) {
+            // data.data is already an SDKMessage object, no need to parse
+            const claudeData = data.data as SDKMessage;
+            processClaudeData(claudeData, context);
+          } else if (data.type === "error") {
+            const errorMessage: SystemMessage = {
+              type: "error",
+              subtype: "stream_error",
+              message: data.error || "Unknown error",
+              timestamp: Date.now(),
+            };
+            context.addMessage(errorMessage);
+          } else if (data.type === "aborted") {
+            const abortedMessage: AbortMessage = {
+              type: "system",
+              subtype: "abort",
+              message: "Operation was aborted by user",
+              timestamp: Date.now(),
+            };
+            context.addMessage(abortedMessage);
+            context.setCurrentAssistantMessage(null);
+          }
+        } catch (parseError) {
+          console.error("Failed to parse stream line:", parseError);
         }
-      } catch (parseError) {
-        console.error("Failed to parse stream line:", parseError);
       }
     },
     [processClaudeData],
+  );
+
+  // Set up debounced stream processing
+  const { debouncedProcess, forceFlush, cleanup } = useDebouncedStreamProcessing(
+    processBatchedLines,
+    {
+      delay: 16, // ~60fps
+      maxBatchSize: 5, // Process in smaller batches to maintain responsiveness
+    }
+  );
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return cleanup;
+  }, [cleanup]);
+
+  const processStreamLine = useCallback(
+    (line: string, context: StreamingContext) => {
+      // Use debounced processing for better performance
+      debouncedProcess(line, context);
+    },
+    [debouncedProcess],
   );
 
   return {

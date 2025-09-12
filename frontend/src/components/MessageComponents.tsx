@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type {
   ChatMessage,
   SystemMessage,
@@ -42,7 +43,7 @@ interface ChatMessageComponentProps {
   message: ChatMessage;
 }
 
-export function ChatMessageComponent({ message }: ChatMessageComponentProps) {
+export const ChatMessageComponent = memo(function ChatMessageComponent({ message }: ChatMessageComponentProps) {
   const isUser = message.role === "user";
   const colorScheme = isUser
     ? "bg-blue-600 text-white"
@@ -95,13 +96,13 @@ export function ChatMessageComponent({ message }: ChatMessageComponentProps) {
       </div>
     </MessageContainer>
   );
-}
+});
 
 interface SystemMessageComponentProps {
   message: SystemMessage;
 }
 
-export function SystemMessageComponent({
+export const SystemMessageComponent = memo(function SystemMessageComponent({
   message,
 }: SystemMessageComponentProps) {
   // Generate details based on message type and subtype
@@ -160,7 +161,7 @@ export function SystemMessageComponent({
       }}
     />
   );
-}
+});
 
 interface ToolMessageComponentProps {
   message: ToolMessage;

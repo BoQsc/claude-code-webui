@@ -22,7 +22,13 @@ import { extractToolInfo, generateToolPatterns } from "./toolUtils";
 interface ToolCache {
   name: string;
   input: Record<string, unknown>;
+  timestamp: number; // Add timestamp for cache cleanup
 }
+
+// Cache management constants
+const MAX_CACHE_SIZE = 100; // Maximum cache entries
+const CACHE_CLEANUP_THRESHOLD = 120; // Start cleanup when this many entries
+const CACHE_ENTRIES_TO_KEEP = 80; // Keep this many entries after cleanup
 
 /**
  * Processing context interface for streaming use case
@@ -89,6 +95,28 @@ export class UnifiedMessageProcessor {
   }
 
   /**
+   * Clean up old cache entries to prevent memory growth
+   */
+  private cleanupCache(): void {
+    if (this.toolUseCache.size <= CACHE_CLEANUP_THRESHOLD) {
+      return;
+    }
+
+    // Sort entries by timestamp and keep the most recent ones
+    const entries = Array.from(this.toolUseCache.entries())
+      .sort(([, a], [, b]) => b.timestamp - a.timestamp)
+      .slice(0, CACHE_ENTRIES_TO_KEEP);
+
+    // Clear and repopulate with recent entries
+    this.toolUseCache.clear();
+    entries.forEach(([id, cache]) => {
+      this.toolUseCache.set(id, cache);
+    });
+
+    console.log(`[UnifiedMessageProcessor] Cache cleanup: kept ${entries.length} entries`);
+  }
+
+  /**
    * Store tool_use information for later correlation with tool_result
    */
   private cacheToolUse(
@@ -96,7 +124,14 @@ export class UnifiedMessageProcessor {
     name: string,
     input: Record<string, unknown>,
   ): void {
-    this.toolUseCache.set(id, { name, input });
+    this.toolUseCache.set(id, { 
+      name, 
+      input, 
+      timestamp: Date.now()
+    });
+
+    // Clean up cache if it gets too large
+    this.cleanupCache();
   }
 
   /**

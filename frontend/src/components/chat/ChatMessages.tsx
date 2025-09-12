@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import type { AllMessage } from "../../types";
 import {
   isChatMessage,
@@ -29,13 +29,30 @@ interface ChatMessagesProps {
 export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
 
-  // Auto-scroll to bottom
-  const scrollToBottom = () => {
-    if (messagesEndRef.current && messagesEndRef.current.scrollIntoView) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+  // Optimized scroll to bottom with requestAnimationFrame
+  const scrollToBottom = useCallback(() => {
+    // Cancel any pending scroll operations
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
     }
-  };
+    if (scrollFrameRef.current) {
+      cancelAnimationFrame(scrollFrameRef.current);
+    }
+
+    // Use requestAnimationFrame for smoother scrolling
+    scrollFrameRef.current = requestAnimationFrame(() => {
+      if (messagesEndRef.current && messagesEndRef.current.scrollIntoView) {
+        messagesEndRef.current.scrollIntoView({ 
+          behavior: "smooth",
+          block: "nearest"
+        });
+      }
+      scrollFrameRef.current = null;
+    });
+  }, []);
 
   // Check if user is near bottom of messages (unused but kept for future use)
   // const isNearBottom = () => {
@@ -49,10 +66,35 @@ export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
   //   );
   // };
 
-  // Auto-scroll when messages change
+  // Debounced scroll when new messages are added or loading state changes
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    // Debounce scroll updates to avoid excessive scrolling during rapid message updates
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+    
+    scrollTimeoutRef.current = setTimeout(() => {
+      scrollToBottom();
+    }, 100); // 100ms debounce for message updates
+
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, [messages.length, isLoading, scrollToBottom]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      if (scrollFrameRef.current) {
+        cancelAnimationFrame(scrollFrameRef.current);
+      }
+    };
+  }, []);
 
   const renderMessage = (message: AllMessage, index: number) => {
     // Use timestamp as key for stable rendering, fallback to index if needed
