@@ -1,0 +1,177 @@
+/**
+ * Custom scrollbar styles with cross-browser support
+ * Integrates with the existing theme system (light/dark mode)
+ */
+
+/* Base scrollbar utilities */
+.scrollbar-styled {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184) transparent; /* slate-400 track */
+}
+
+.scrollbar-styled::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-styled::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+.scrollbar-styled::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184); /* slate-400 */
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+.scrollbar-styled::-webkit-scrollbar-thumb:hover {
+  background: rgb(100 116 139); /* slate-500 */
+  background-clip: padding-box;
+}
+
+.scrollbar-styled::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Dark theme scrollbars */
+.dark .scrollbar-styled {
+  /* Firefox dark mode */
+  scrollbar-color: rgb(71 85 105) transparent; /* slate-600 track */
+}
+
+.dark .scrollbar-styled::-webkit-scrollbar-thumb {
+  background: rgb(71 85 105); /* slate-600 */
+}
+
+.dark .scrollbar-styled::-webkit-scrollbar-thumb:hover {
+  background: rgb(51 65 85); /* slate-700 */
+}
+
+/* Thin variant for compact areas */
+.scrollbar-thin {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgb(203 213 225) transparent; /* slate-300 track */
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgb(203 213 225); /* slate-300 */
+  border-radius: 3px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgb(148 163 184); /* slate-400 */
+  background-clip: padding-box;
+}
+
+.dark .scrollbar-thin {
+  /* Firefox dark mode */
+  scrollbar-color: rgb(71 85 105) transparent; /* slate-600 track */
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgb(71 85 105); /* slate-600 */
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgb(51 65 85); /* slate-700 */
+}
+
+/* Code block scrollbar variant */
+.scrollbar-code {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgb(71 85 105) rgb(15 23 42); /* slate-600 thumb, slate-900 track */
+}
+
+.scrollbar-code::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-code::-webkit-scrollbar-track {
+  background: rgb(15 23 42); /* slate-900 */
+  border-radius: 4px;
+}
+
+.scrollbar-code::-webkit-scrollbar-thumb {
+  background: rgb(71 85 105); /* slate-600 */
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+.scrollbar-code::-webkit-scrollbar-thumb:hover {
+  background: rgb(100 116 139); /* slate-500 */
+  background-clip: padding-box;
+}
+
+/* Light theme code blocks */
+.scrollbar-code-light {
+  /* Firefox */
+  scrollbar-color: rgb(203 213 225) rgb(248 250 252); /* slate-300 thumb, slate-50 track */
+}
+
+.scrollbar-code-light::-webkit-scrollbar-track {
+  background: rgb(248 250 252); /* slate-50 */
+}
+
+.scrollbar-code-light::-webkit-scrollbar-thumb {
+  background: rgb(203 213 225); /* slate-300 */
+}
+
+.scrollbar-code-light::-webkit-scrollbar-thumb:hover {
+  background: rgb(148 163 184); /* slate-400 */
+}
+
+/* Invisible scrollbar for special cases */
+.scrollbar-hidden {
+  -ms-overflow-style: none;  /* Internet Explorer 10+ */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;  /* Safari and Chrome */
+}
+
+/* Blue accent scrollbar for special areas */
+.scrollbar-blue {
+  /* Firefox */
+  scrollbar-color: rgb(59 130 246) transparent; /* blue-500 */
+}
+
+.scrollbar-blue::-webkit-scrollbar-thumb {
+  background: rgb(59 130 246); /* blue-500 */
+}
+
+.scrollbar-blue::-webkit-scrollbar-thumb:hover {
+  background: rgb(37 99 235); /* blue-600 */
+}
+
+.dark .scrollbar-blue {
+  /* Firefox dark mode */
+  scrollbar-color: rgb(96 165 250) transparent; /* blue-400 */
+}
+
+.dark .scrollbar-blue::-webkit-scrollbar-thumb {
+  background: rgb(96 165 250); /* blue-400 */
+}
+
+.dark .scrollbar-blue::-webkit-scrollbar-thumb:hover {
+  background: rgb(59 130 246); /* blue-500 */
+}

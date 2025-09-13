@@ -112,7 +112,7 @@ export function ChatMessageComponent({ message }: ChatMessageComponentProps) {
             : "bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300"
         }`}>
           <div className="text-xs opacity-70 mb-2 font-sans">Markdown Source:</div>
-          <pre className="whitespace-pre-wrap overflow-x-auto">{message.content}</pre>
+          <pre className="whitespace-pre-wrap overflow-x-auto scrollbar-thin">{message.content}</pre>
         </div>
       ) : (
         <MarkdownRenderer

@@ -127,7 +127,7 @@ export function HistoryView({ encodedName }: HistoryViewProps) {
   return (
     <div className="flex-1 overflow-hidden">
       <div className="p-6 h-full flex flex-col">
-        <div className="grid gap-4 flex-1 overflow-y-auto">
+        <div className="grid gap-4 flex-1 overflow-y-auto scrollbar-styled">
           {conversations.map((conversation) => (
             <div
               key={conversation.sessionId}

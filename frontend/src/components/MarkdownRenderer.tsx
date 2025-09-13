@@ -72,7 +72,7 @@ export function MarkdownRenderer({
             style={isDark ? oneDark : oneLight}
             language={language}
             PreTag="div"
-            className="rounded-lg my-3"
+            className={`rounded-lg my-3 ${isDark ? 'scrollbar-code' : 'scrollbar-code-light'}`}
           >
             {childText.replace(/\n$/, "")}
           </SyntaxHighlighter>
@@ -295,7 +295,7 @@ export function MarkdownRenderer({
     // Tables
     table({ children, ...props }) {
       return (
-        <div className="overflow-x-auto my-3">
+        <div className="overflow-x-auto scrollbar-thin my-3">
           <table
             className={`min-w-full border-collapse ${
               isDark ? "border-slate-600" : "border-slate-300"

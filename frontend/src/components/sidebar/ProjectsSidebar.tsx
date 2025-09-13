@@ -267,7 +267,7 @@ export default function ProjectsSidebar({ onConversationSelect, activeProjectPat
         </p>
       </div>
       
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
         {projects.length === 0 ? (
           <div className="p-4 text-sm text-gray-500 dark:text-gray-400 text-center">
             No projects found. Start a conversation with Claude CLI to see projects here.

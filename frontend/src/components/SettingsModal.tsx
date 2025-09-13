@@ -57,7 +57,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
+        <div className="overflow-y-auto scrollbar-styled max-h-[calc(90vh-120px)]">
           <div className="p-6">
             <GeneralSettings />
           </div>
