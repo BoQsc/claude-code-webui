@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronLeftIcon } from "@heroicons/react/24/outline";
 import type {
@@ -31,17 +31,21 @@ export function ChatPage() {
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Extract and normalize working directory from URL
-  const workingDirectory = (() => {
+  // Extract encoded project name from URL and resolve to actual working directory
+  const workingDirectory = useMemo(() => {
     const rawPath = location.pathname.replace("/projects", "");
-    if (!rawPath) return undefined;
+    if (!rawPath || !projects.length) return undefined;
 
-    // URL decode the path
-    const decodedPath = decodeURIComponent(rawPath);
+    // Extract encoded project name from URL path (e.g., "/claude-code-webui/chat" -> "claude-code-webui")
+    const pathParts = rawPath.split("/").filter(Boolean);
+    const encodedProjectName = pathParts[0];
 
-    // Normalize Windows paths (remove leading slash from /C:/... format)
-    return normalizeWindowsPath(decodedPath);
-  })();
+    if (!encodedProjectName) return undefined;
+
+    // Find the project with matching encodedName and return its actual filesystem path
+    const project = projects.find((p) => p.encodedName === encodedProjectName);
+    return project?.path;
+  }, [location.pathname, projects]);
 
   // Get current view and sessionId from query parameters
   const currentView = searchParams.get("view");
@@ -55,25 +59,14 @@ export function ChatPage() {
   // Permission mode state management
   const { permissionMode, setPermissionMode } = usePermissionMode();
 
-  // Get encoded name for current working directory
-  const getEncodedName = useCallback(() => {
-    if (!workingDirectory || !projects.length) {
-      return null;
-    }
+  // Extract encoded name from URL for current project
+  const encodedName = useMemo(() => {
+    const rawPath = location.pathname.replace("/projects", "");
+    if (!rawPath) return null;
 
-    const project = projects.find((p) => p.path === workingDirectory);
-
-    // Normalize paths for comparison (handle Windows path issues)
-    const normalizedWorking = normalizeWindowsPath(workingDirectory);
-    const normalizedProject = projects.find(
-      (p) => normalizeWindowsPath(p.path) === normalizedWorking,
-    );
-
-    // Use normalized result if exact match fails
-    const finalProject = project || normalizedProject;
-
-    return finalProject?.encodedName || null;
-  }, [workingDirectory, projects]);
+    const pathParts = rawPath.split("/").filter(Boolean);
+    return pathParts[0] || null;
+  }, [location.pathname]);
 
   // Load conversation history if sessionId is provided
   const {
@@ -82,7 +75,7 @@ export function ChatPage() {
     error: historyError,
     sessionId: loadedSessionId,
   } = useAutoHistoryLoader(
-    getEncodedName() || undefined,
+    encodedName || undefined,
     sessionId || undefined,
   );
 
@@ -516,7 +509,7 @@ export function ChatPage() {
         {isHistoryView ? (
           <HistoryView
             workingDirectory={workingDirectory || ""}
-            encodedName={getEncodedName()}
+            encodedName={encodedName}
             onBack={handleBackToChat}
           />
         ) : historyLoading ? (
