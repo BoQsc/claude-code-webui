@@ -222,6 +222,16 @@ export function CombinedToolMessageComponent({
   const isExecuting = !resultMessage;
   const isCompleted = !!resultMessage;
 
+  // Check if there's an error (bash command with stderr, or other error indicators)
+  const hasError = resultMessage && (
+    (resultMessage.toolName === "Bash" &&
+     resultMessage.toolUseResult &&
+     'stderr' in resultMessage.toolUseResult &&
+     Boolean(resultMessage.toolUseResult.stderr?.trim())) ||
+    resultMessage.content.toLowerCase().includes('error') ||
+    resultMessage.content.toLowerCase().includes('failed')
+  );
+
   // Set up animation classes
   const executingIconClass = "animate-spin";
   const completedIconClass = "animate-pulse";
@@ -290,27 +300,46 @@ export function CombinedToolMessageComponent({
       details={displayContent}
       badge={resultMessage ? (resultMessage.toolName === "Edit" ? previewSummary : resultMessage.summary) : "Executing..."}
       icon={
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           {isExecuting ? (
-            <div className={`w-3 h-3 bg-blue-500 dark:bg-blue-600 rounded-full flex items-center justify-center text-white text-xs ${executingIconClass}`}>
-              🔧
+            // In-progress state: spinning tool icon
+            <div className={`w-4 h-4 bg-blue-500 dark:bg-blue-600 rounded-full flex items-center justify-center text-white text-xs ${executingIconClass}`}>
+              <span>🔧</span>
+            </div>
+          ) : hasError ? (
+            // Error state: error icon
+            <div className="w-4 h-4 bg-red-500 dark:bg-red-600 rounded-full flex items-center justify-center text-white text-xs">
+              <span>❌</span>
             </div>
           ) : (
-            <>
-              <div className="w-3 h-3 bg-emerald-500 dark:bg-emerald-600 rounded-full flex items-center justify-center text-white text-xs">
-                🔧
-              </div>
-              <span className="text-xs opacity-60 transition-opacity duration-300">→</span>
-              <span className={`bg-emerald-400 dark:bg-emerald-500 text-xs transition-all duration-300 ${completedIconClass}`}>✓</span>
-            </>
+            // Success state: checkmark icon
+            <div className="w-4 h-4 bg-emerald-500 dark:bg-emerald-600 rounded-full flex items-center justify-center text-white text-xs">
+              <span>✅</span>
+            </div>
           )}
         </div>
       }
       colorScheme={{
-        header: isExecuting ? "text-blue-800 dark:text-blue-300" : "text-emerald-800 dark:text-emerald-300",
-        content: isExecuting ? "text-blue-700 dark:text-blue-300" : "text-emerald-700 dark:text-emerald-300",
-        border: isExecuting ? "border-blue-200 dark:border-blue-700" : "border-emerald-200 dark:border-emerald-700",
-        bg: isExecuting ? "bg-blue-50/80 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800" : "bg-emerald-50/80 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800",
+        header: isExecuting
+          ? "text-blue-800 dark:text-blue-300"
+          : hasError
+          ? "text-red-800 dark:text-red-300"
+          : "text-emerald-800 dark:text-emerald-300",
+        content: isExecuting
+          ? "text-blue-700 dark:text-blue-300"
+          : hasError
+          ? "text-red-700 dark:text-red-300"
+          : "text-emerald-700 dark:text-emerald-300",
+        border: isExecuting
+          ? "border-blue-200 dark:border-blue-700"
+          : hasError
+          ? "border-red-200 dark:border-red-700"
+          : "border-emerald-200 dark:border-emerald-700",
+        bg: isExecuting
+          ? "bg-blue-50/80 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+          : hasError
+          ? "bg-red-50/80 dark:bg-red-900/20 border border-red-200 dark:border-red-800"
+          : "bg-emerald-50/80 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800",
       }}
       previewContent={previewContent}
       previewSummary={previewSummary}
