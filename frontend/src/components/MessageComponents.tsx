@@ -209,6 +209,119 @@ export function ToolMessageComponent({ message }: ToolMessageComponentProps) {
   );
 }
 
+interface CombinedToolMessageComponentProps {
+  toolMessage: ToolMessage;
+  resultMessage?: ToolResultMessage; // Optional - might be executing
+}
+
+export function CombinedToolMessageComponent({
+  toolMessage,
+  resultMessage
+}: CombinedToolMessageComponentProps) {
+  // Determine if tool is still executing or completed
+  const isExecuting = !resultMessage;
+  const isCompleted = !!resultMessage;
+
+  // Set up animation classes
+  const executingIconClass = "animate-spin";
+  const completedIconClass = "animate-pulse";
+
+  let previewContent: string | undefined;
+  let previewSummary: string | undefined;
+  let maxPreviewLines = 5;
+  let displayContent = "";
+  let defaultExpanded = false;
+  let badge = "";
+
+  if (resultMessage) {
+    const toolUseResult = resultMessage.toolUseResult;
+    displayContent = resultMessage.content;
+    badge = resultMessage.summary;
+
+    // Handle Edit tool results with structuredPatch
+    if (resultMessage.toolName === "Edit" && isEditToolUseResult(toolUseResult)) {
+      const editResult = createEditResult(
+        toolUseResult.structuredPatch,
+        resultMessage.content,
+        20, // autoExpandThreshold: auto-expand if 20 lines or fewer
+      );
+      displayContent = editResult.details;
+      previewSummary = editResult.summary;
+      previewContent = editResult.previewContent;
+      defaultExpanded = editResult.defaultExpanded;
+      maxPreviewLines = 20; // Use 20 for Edit results to match previewContent
+      badge = previewSummary || resultMessage.summary;
+    }
+
+    // Handle Bash tool results with stdout/stderr
+    else if (resultMessage.toolName === "Bash" && isBashToolUseResult(toolUseResult)) {
+      const isError = Boolean(toolUseResult.stderr?.trim());
+      const bashPreview = createBashPreview(
+        toolUseResult.stdout || "",
+        toolUseResult.stderr || "",
+        isError,
+        5,
+      );
+      if (bashPreview.hasMore) {
+        previewContent = bashPreview.preview;
+      }
+    }
+
+    // Handle specific tool results that benefit from content preview
+    // Note: Read tool should NOT show preview, only line counts in summary
+    else if (resultMessage.toolName === "Grep" && resultMessage.content.trim().length > 0) {
+      const contentPreview = createContentPreview(resultMessage.content, 5);
+      if (contentPreview.hasMore) {
+        previewContent = contentPreview.preview;
+      }
+    }
+  }
+
+  // Determine if preview should be shown for this tool
+  const shouldShowPreview = resultMessage && (
+    resultMessage.toolName === "Bash" ||
+    resultMessage.toolName === "Edit" ||
+    resultMessage.toolName === "Grep"
+  );
+
+  return (
+    <CollapsibleDetails
+      label={toolMessage.content}
+      details={displayContent}
+      badge={resultMessage ? (resultMessage.toolName === "Edit" ? previewSummary : resultMessage.summary) : "Executing..."}
+      icon={
+        <div className="flex items-center gap-1">
+          {isExecuting ? (
+            <div className={`w-3 h-3 bg-blue-500 dark:bg-blue-600 rounded-full flex items-center justify-center text-white text-xs ${executingIconClass}`}>
+              🔧
+            </div>
+          ) : (
+            <>
+              <div className="w-3 h-3 bg-emerald-500 dark:bg-emerald-600 rounded-full flex items-center justify-center text-white text-xs">
+                🔧
+              </div>
+              <span className="text-xs opacity-60 transition-opacity duration-300">→</span>
+              <span className={`bg-emerald-400 dark:bg-emerald-500 text-xs transition-all duration-300 ${completedIconClass}`}>✓</span>
+            </>
+          )}
+        </div>
+      }
+      colorScheme={{
+        header: isExecuting ? "text-blue-800 dark:text-blue-300" : "text-emerald-800 dark:text-emerald-300",
+        content: isExecuting ? "text-blue-700 dark:text-blue-300" : "text-emerald-700 dark:text-emerald-300",
+        border: isExecuting ? "border-blue-200 dark:border-blue-700" : "border-emerald-200 dark:border-emerald-700",
+        bg: isExecuting ? "bg-blue-50/80 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800" : "bg-emerald-50/80 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800",
+      }}
+      previewContent={previewContent}
+      previewSummary={previewSummary}
+      maxPreviewLines={maxPreviewLines}
+      showPreview={shouldShowPreview}
+      defaultExpanded={defaultExpanded}
+      useDiffHighlighter={resultMessage?.toolName === "Edit"}
+    />
+  );
+}
+
 interface ToolResultMessageComponentProps {
   message: ToolResultMessage;
 }

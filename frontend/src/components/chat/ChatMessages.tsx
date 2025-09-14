@@ -14,6 +14,7 @@ import {
   SystemMessageComponent,
   ToolMessageComponent,
   ToolResultMessageComponent,
+  CombinedToolMessageComponent,
   PlanMessageComponent,
   ThinkingMessageComponent,
   TodoMessageComponent,
@@ -24,6 +25,77 @@ import {
 interface ChatMessagesProps {
   messages: AllMessage[];
   isLoading: boolean;
+}
+
+// Type for grouped messages
+type MessageGroup =
+  | { type: "single"; message: AllMessage; index: number }
+  | { type: "combined_tool"; toolMessage: ToolMessage; resultMessage?: ToolResultMessage; index: number };
+
+// Helper function to extract tool name from tool message content
+function extractToolNameFromMessage(content: string): string {
+  // Look for pattern like "Read(...)" or "Edit(...)"
+  const match = content.match(/^([A-Za-z]+)\(/);
+  return match ? match[1] : "";
+}
+
+// Helper function to group consecutive tool messages
+function groupMessages(messages: AllMessage[]): MessageGroup[] {
+  const groups: MessageGroup[] = [];
+  let i = 0;
+
+  while (i < messages.length) {
+    const currentMessage = messages[i];
+    const nextMessage = messages[i + 1];
+
+    // Check if we have a tool message followed by a tool result message
+    if (
+      isToolMessage(currentMessage) &&
+      nextMessage &&
+      isToolResultMessage(nextMessage)
+    ) {
+      const toolNameFromMessage = extractToolNameFromMessage(currentMessage.content);
+      const isRelated =
+        toolNameFromMessage === nextMessage.toolName ||
+        currentMessage.content.startsWith(nextMessage.toolName) ||
+        currentMessage.content.includes(`${nextMessage.toolName}(`);
+
+      const timeGapReasonable = Math.abs(nextMessage.timestamp - currentMessage.timestamp) < 10000; // Within 10 seconds
+
+      if (isRelated && timeGapReasonable) {
+        // Create combined group
+        groups.push({
+          type: "combined_tool",
+          toolMessage: currentMessage,
+          resultMessage: nextMessage,
+          index: i
+        });
+        i += 2; // Skip both messages
+        continue;
+      }
+    }
+
+    // Check if this is a standalone tool message (should be shown as executing)
+    if (isToolMessage(currentMessage)) {
+      // Create combined group with no result message (executing state)
+      groups.push({
+        type: "combined_tool",
+        toolMessage: currentMessage,
+        resultMessage: undefined, // This will show executing state
+        index: i
+      });
+    } else {
+      // Single message (for non-tool messages)
+      groups.push({
+        type: "single",
+        message: currentMessage,
+        index: i
+      });
+    }
+    i += 1;
+  }
+
+  return groups;
 }
 
 export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
@@ -54,24 +126,37 @@ export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
     scrollToBottom();
   }, [messages]);
 
-  const renderMessage = (message: AllMessage, index: number) => {
-    // Use timestamp as key for stable rendering, fallback to index if needed
-    const key = `${message.timestamp}-${index}`;
+  const renderMessageGroup = (group: MessageGroup) => {
+    if (group.type === "combined_tool") {
+      // Render combined tool message
+      const key = `combined-${group.toolMessage.timestamp}-${group.index}`;
+      return (
+        <CombinedToolMessageComponent
+          key={key}
+          toolMessage={group.toolMessage}
+          resultMessage={group.resultMessage}
+        />
+      );
+    } else {
+      // Render single message
+      const message = group.message;
+      const key = `${message.timestamp}-${group.index}`;
 
-    if (isSystemMessage(message)) {
-      return <SystemMessageComponent key={key} message={message} />;
-    } else if (isToolMessage(message)) {
-      return <ToolMessageComponent key={key} message={message} />;
-    } else if (isToolResultMessage(message)) {
-      return <ToolResultMessageComponent key={key} message={message} />;
-    } else if (isPlanMessage(message)) {
-      return <PlanMessageComponent key={key} message={message} />;
-    } else if (isThinkingMessage(message)) {
-      return <ThinkingMessageComponent key={key} message={message} />;
-    } else if (isTodoMessage(message)) {
-      return <TodoMessageComponent key={key} message={message} />;
-    } else if (isChatMessage(message)) {
-      return <ChatMessageComponent key={key} message={message} />;
+      if (isSystemMessage(message)) {
+        return <SystemMessageComponent key={key} message={message} />;
+      } else if (isToolMessage(message)) {
+        return <ToolMessageComponent key={key} message={message} />;
+      } else if (isToolResultMessage(message)) {
+        return <ToolResultMessageComponent key={key} message={message} />;
+      } else if (isPlanMessage(message)) {
+        return <PlanMessageComponent key={key} message={message} />;
+      } else if (isThinkingMessage(message)) {
+        return <ThinkingMessageComponent key={key} message={message} />;
+      } else if (isTodoMessage(message)) {
+        return <TodoMessageComponent key={key} message={message} />;
+      } else if (isChatMessage(message)) {
+        return <ChatMessageComponent key={key} message={message} />;
+      }
     }
     return null;
   };
@@ -87,7 +172,7 @@ export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
         <>
           {/* Spacer div to push messages to the bottom */}
           <div className="flex-1" aria-hidden="true"></div>
-          {messages.map(renderMessage)}
+          {groupMessages(messages).map(renderMessageGroup)}
           {isLoading && <LoadingComponent />}
           <div ref={messagesEndRef} />
         </>
