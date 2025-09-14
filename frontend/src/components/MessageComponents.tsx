@@ -222,6 +222,10 @@ export function CombinedToolMessageComponent({
   const isExecuting = !resultMessage;
   const isCompleted = !!resultMessage;
 
+  // Check if this is an old message that should be assumed completed (5+ minutes old)
+  const isOldMessage = (Date.now() - toolMessage.timestamp) > (5 * 60 * 1000);
+  const isAssumedCompleted = !resultMessage && isOldMessage;
+
   // Check if there's an error (bash command with stderr, or other error indicators)
   const hasError = resultMessage && (
     (resultMessage.toolName === "Bash" &&
@@ -298,13 +302,18 @@ export function CombinedToolMessageComponent({
     <CollapsibleDetails
       label={toolMessage.content}
       details={displayContent}
-      badge={resultMessage ? (resultMessage.toolName === "Edit" ? previewSummary : resultMessage.summary) : "Executing..."}
+      badge={resultMessage ? (resultMessage.toolName === "Edit" ? previewSummary : resultMessage.summary) : isAssumedCompleted ? "Completed" : "Executing..."}
       icon={
         <div className="flex items-center gap-2">
-          {isExecuting ? (
+          {isExecuting && !isAssumedCompleted ? (
             // In-progress state: spinning tool icon
             <div className={`w-4 h-4 bg-blue-500 dark:bg-blue-600 rounded-full flex items-center justify-center text-white text-xs ${executingIconClass}`}>
               <span>🔧</span>
+            </div>
+          ) : isAssumedCompleted ? (
+            // Assumed completed state: blue checkmark icon
+            <div className="w-4 h-4 bg-blue-500 dark:bg-blue-600 rounded-full flex items-center justify-center text-white text-xs">
+              <span>🔵</span>
             </div>
           ) : hasError ? (
             // Error state: error icon
@@ -312,7 +321,7 @@ export function CombinedToolMessageComponent({
               <span>❌</span>
             </div>
           ) : (
-            // Success state: checkmark icon
+            // Confirmed success state: green checkmark icon
             <div className="w-4 h-4 bg-emerald-500 dark:bg-emerald-600 rounded-full flex items-center justify-center text-white text-xs">
               <span>✅</span>
             </div>
@@ -320,22 +329,22 @@ export function CombinedToolMessageComponent({
         </div>
       }
       colorScheme={{
-        header: isExecuting
+        header: (isExecuting && !isAssumedCompleted) || isAssumedCompleted
           ? "text-blue-800 dark:text-blue-300"
           : hasError
           ? "text-red-800 dark:text-red-300"
           : "text-emerald-800 dark:text-emerald-300",
-        content: isExecuting
+        content: (isExecuting && !isAssumedCompleted) || isAssumedCompleted
           ? "text-blue-700 dark:text-blue-300"
           : hasError
           ? "text-red-700 dark:text-red-300"
           : "text-emerald-700 dark:text-emerald-300",
-        border: isExecuting
+        border: (isExecuting && !isAssumedCompleted) || isAssumedCompleted
           ? "border-blue-200 dark:border-blue-700"
           : hasError
           ? "border-red-200 dark:border-red-700"
           : "border-emerald-200 dark:border-emerald-700",
-        bg: isExecuting
+        bg: (isExecuting && !isAssumedCompleted) || isAssumedCompleted
           ? "bg-blue-50/80 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
           : hasError
           ? "bg-red-50/80 dark:bg-red-900/20 border border-red-200 dark:border-red-800"

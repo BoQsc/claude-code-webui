@@ -60,7 +60,11 @@ function groupMessages(messages: AllMessage[]): MessageGroup[] {
         currentMessage.content.startsWith(nextMessage.toolName) ||
         currentMessage.content.includes(`${nextMessage.toolName}(`);
 
-      const timeGapReasonable = Math.abs(nextMessage.timestamp - currentMessage.timestamp) < 10000; // Within 10 seconds
+      const timeGap = Math.abs(nextMessage.timestamp - currentMessage.timestamp);
+      const timeGapReasonable = timeGap < 30000; // Increased to 30 seconds for more flexibility
+
+      // Debug logging (remove after testing)
+      console.log(`[MessageGrouping] Tool: "${toolNameFromMessage}", Result: "${nextMessage.toolName}", Related: ${isRelated}, TimeGap: ${timeGap}ms, Reasonable: ${timeGapReasonable}`);
 
       if (isRelated && timeGapReasonable) {
         // Create combined group
