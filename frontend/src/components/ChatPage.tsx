@@ -93,9 +93,22 @@ export function ChatPage() {
     // First, try to find by encodedName (e.g., "C--Users-Windows10-new-Documents-claude-code-webui")
     let project = projects.find((p) => p.encodedName === firstSegment);
 
-    // If not found, try to find by actual path (for URL-encoded Windows paths)
+    // If not found, try to convert URL-encoded path to encoded name format
+    if (!project && decodedPath.includes(':')) {
+      // Convert "C:/Users/Windows10_new/Documents/claude-code-webui" to "C--Users-Windows10-new-Documents-claude-code-webui"
+      const encodedNameFromPath = decodedPath
+        .replace(/^([A-Z]):[\\/]/, "$1--")  // C:/ -> C--
+        .replace(/[\\/]/g, "-")             // / or \ -> -
+        .replace(/_/g, "-");                // _ -> - (for Windows10_new -> Windows10-new)
+
+      project = projects.find((p) => p.encodedName === encodedNameFromPath);
+    }
+
+    // If still not found, try to find by actual path (for URL-encoded Windows paths)
+    // Normalize path separators for comparison (convert forward slashes to backslashes on Windows)
     if (!project) {
-      project = projects.find((p) => p.path === decodedPath);
+      const normalizedDecodedPath = decodedPath.replace(/\//g, "\\");
+      project = projects.find((p) => p.path === normalizedDecodedPath);
     }
 
     return project?.path;
@@ -104,7 +117,6 @@ export function ChatPage() {
   // Get current view and sessionId from query parameters
   const currentView = searchParams.get("view");
   const sessionId = searchParams.get("sessionId");
-  console.log(`[ChatPage] Session ID from URL: ${sessionId}`);
   const isHistoryView = currentView === "history";
   const isLoadedConversation = !!sessionId && !isHistoryView;
 
@@ -118,12 +130,10 @@ export function ChatPage() {
   const encodedName = useMemo(() => {
     // Use the working directory to find the matching project and get its encodedName
     if (!workingDirectory || !projects.length) {
-      console.log(`[ChatPage] encodedName - no workingDirectory (${workingDirectory}) or projects (${projects.length})`);
       return null;
     }
 
     const project = projects.find((p) => p.path === workingDirectory);
-    console.log(`[ChatPage] encodedName - workingDirectory: ${workingDirectory}, found project: ${project?.encodedName || 'none'}`);
     return project?.encodedName || null;
   }, [workingDirectory, projects]);
 
