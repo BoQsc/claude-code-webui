@@ -81,14 +81,23 @@ export function ChatPage() {
     const rawPath = location.pathname.replace("/projects", "");
     if (!rawPath || !projects.length) return undefined;
 
-    // Extract encoded project name from URL path (e.g., "/claude-code-webui/chat" -> "claude-code-webui")
+    // Extract the first path segment (could be encoded name or URL-encoded Windows path)
     const pathParts = rawPath.split("/").filter(Boolean);
-    const encodedProjectName = pathParts[0];
+    const firstSegment = pathParts[0];
 
-    if (!encodedProjectName) return undefined;
+    if (!firstSegment) return undefined;
 
-    // Find the project with matching encodedName and return its actual filesystem path
-    const project = projects.find((p) => p.encodedName === encodedProjectName);
+    // Try to decode it as a URL-encoded Windows path
+    const decodedPath = decodeURIComponent(firstSegment);
+
+    // First, try to find by encodedName (e.g., "C--Users-Windows10-new-Documents-claude-code-webui")
+    let project = projects.find((p) => p.encodedName === firstSegment);
+
+    // If not found, try to find by actual path (for URL-encoded Windows paths)
+    if (!project) {
+      project = projects.find((p) => p.path === decodedPath);
+    }
+
     return project?.path;
   }, [location.pathname, projects]);
 
@@ -107,12 +116,16 @@ export function ChatPage() {
 
   // Extract encoded name from URL for current project
   const encodedName = useMemo(() => {
-    const rawPath = location.pathname.replace("/projects", "");
-    if (!rawPath) return null;
+    // Use the working directory to find the matching project and get its encodedName
+    if (!workingDirectory || !projects.length) {
+      console.log(`[ChatPage] encodedName - no workingDirectory (${workingDirectory}) or projects (${projects.length})`);
+      return null;
+    }
 
-    const pathParts = rawPath.split("/").filter(Boolean);
-    return pathParts[0] || null;
-  }, [location.pathname]);
+    const project = projects.find((p) => p.path === workingDirectory);
+    console.log(`[ChatPage] encodedName - workingDirectory: ${workingDirectory}, found project: ${project?.encodedName || 'none'}`);
+    return project?.encodedName || null;
+  }, [workingDirectory, projects]);
 
   // Load conversation history if sessionId is provided
   const {
