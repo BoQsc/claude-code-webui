@@ -61,10 +61,17 @@ function groupMessages(messages: AllMessage[]): MessageGroup[] {
         currentMessage.content.includes(`${nextMessage.toolName}(`);
 
       const timeGap = Math.abs(nextMessage.timestamp - currentMessage.timestamp);
-      const timeGapReasonable = timeGap < 30000; // Increased to 30 seconds for more flexibility
+      const timeGapReasonable = timeGap < 30000; // 30 seconds for flexibility
 
-      // Debug logging (remove after testing)
-      console.log(`[MessageGrouping] Tool: "${toolNameFromMessage}", Result: "${nextMessage.toolName}", Related: ${isRelated}, TimeGap: ${timeGap}ms, Reasonable: ${timeGapReasonable}`);
+      // Debug logging for Write tool specifically
+      if (toolNameFromMessage === "Write" || nextMessage.toolName === "Write") {
+        console.log(`[DEBUG] Write Tool Pairing FAILED!`);
+        console.log(`- Tool Name Extracted: "${toolNameFromMessage}"`);
+        console.log(`- Result Tool Name: "${nextMessage.toolName}"`);
+        console.log(`- Is Related: ${isRelated}`);
+        console.log(`- Time Gap: ${timeGap}ms (${timeGapReasonable})`);
+        console.log(`- Will Combine: ${isRelated && timeGapReasonable}`);
+      }
 
       if (isRelated && timeGapReasonable) {
         // Create combined group
