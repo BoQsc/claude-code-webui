@@ -53,3 +53,13 @@ export const getClaudeProjectsUrl = () => {
 export const getClaudeProjectConversationsUrl = (encodedProjectName: string) => {
   return `${API_CONFIG.ENDPOINTS.CLAUDE_PROJECTS}/${encodedProjectName}/conversations`;
 };
+
+// Helper function to get session persistence URL
+export const getSessionPersistUrl = (sessionId: string) => {
+  return `/api/sessions/${sessionId}/persist`;
+};
+
+// Helper function to get session status URL
+export const getSessionStatusUrl = (sessionId: string) => {
+  return `/api/sessions/${sessionId}/status`;
+};

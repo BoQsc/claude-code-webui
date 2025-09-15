@@ -44,57 +44,72 @@ function groupMessages(messages: AllMessage[]): MessageGroup[] {
   const groups: MessageGroup[] = [];
   let i = 0;
 
+
   while (i < messages.length) {
     const currentMessage = messages[i];
-    const nextMessage = messages[i + 1];
 
-    // Check if we have a tool message followed by a tool result message
-    if (
-      isToolMessage(currentMessage) &&
-      nextMessage &&
-      isToolResultMessage(nextMessage)
-    ) {
+    // If this is a tool message, look for its corresponding result
+    if (isToolMessage(currentMessage)) {
       const toolNameFromMessage = extractToolNameFromMessage(currentMessage.content);
-      const isRelated =
-        toolNameFromMessage === nextMessage.toolName ||
-        currentMessage.content.startsWith(nextMessage.toolName) ||
-        currentMessage.content.includes(`${nextMessage.toolName}(`);
+      let foundResult = false;
 
-      const timeGap = Math.abs(nextMessage.timestamp - currentMessage.timestamp);
-      const timeGapReasonable = timeGap < 30000; // 30 seconds for flexibility
+      // Look ahead for a matching result message (within the next few messages)
+      for (let j = i + 1; j < Math.min(i + 5, messages.length); j++) {
+        const candidateResult = messages[j];
 
-      // Debug logging for Write tool specifically
-      if (toolNameFromMessage === "Write" || nextMessage.toolName === "Write") {
-        console.log(`[DEBUG] Write Tool Pairing FAILED!`);
-        console.log(`- Tool Name Extracted: "${toolNameFromMessage}"`);
-        console.log(`- Result Tool Name: "${nextMessage.toolName}"`);
-        console.log(`- Is Related: ${isRelated}`);
-        console.log(`- Time Gap: ${timeGap}ms (${timeGapReasonable})`);
-        console.log(`- Will Combine: ${isRelated && timeGapReasonable}`);
+        if (isToolResultMessage(candidateResult)) {
+          const isRelated =
+            toolNameFromMessage === candidateResult.toolName ||
+            currentMessage.content.startsWith(candidateResult.toolName) ||
+            currentMessage.content.includes(`${candidateResult.toolName}(`);
+
+          const timeGap = Math.abs(candidateResult.timestamp - currentMessage.timestamp);
+          const timeGapReasonable = timeGap < 60000; // Extended to 60 seconds
+
+
+          if (isRelated && timeGapReasonable) {
+
+            // Create combined group
+            groups.push({
+              type: "combined_tool",
+              toolMessage: currentMessage,
+              resultMessage: candidateResult,
+              index: i
+            });
+
+            // Add any intermediate messages as individual groups
+            // But skip tool messages that should be part of combined groups
+            for (let k = i + 1; k < j; k++) {
+              const intermediateMessage = messages[k];
+              // Only add intermediate messages that are NOT tool messages
+              // Tool messages should either be in their own combined group or not rendered separately
+              if (!isToolMessage(intermediateMessage)) {
+                groups.push({
+                  type: "single",
+                  message: intermediateMessage,
+                  index: k
+                });
+              }
+            }
+
+            // Skip to after the result message
+            i = j + 1;
+            foundResult = true;
+            break;
+          }
+        }
       }
 
-      if (isRelated && timeGapReasonable) {
-        // Create combined group
+      if (!foundResult) {
+        // No matching result found, treat as standalone tool message
         groups.push({
           type: "combined_tool",
           toolMessage: currentMessage,
-          resultMessage: nextMessage,
+          resultMessage: undefined, // This will show executing state or assumed completed
           index: i
         });
-        i += 2; // Skip both messages
-        continue;
+        i += 1;
       }
-    }
-
-    // Check if this is a standalone tool message (should be shown as executing)
-    if (isToolMessage(currentMessage)) {
-      // Create combined group with no result message (executing state)
-      groups.push({
-        type: "combined_tool",
-        toolMessage: currentMessage,
-        resultMessage: undefined, // This will show executing state
-        index: i
-      });
     } else {
       // Single message (for non-tool messages)
       groups.push({
@@ -102,9 +117,10 @@ function groupMessages(messages: AllMessage[]): MessageGroup[] {
         message: currentMessage,
         index: i
       });
+      i += 1;
     }
-    i += 1;
   }
+
 
   return groups;
 }
@@ -139,6 +155,7 @@ export function ChatMessages({ messages, isLoading }: ChatMessagesProps) {
 
   const renderMessageGroup = (group: MessageGroup) => {
     if (group.type === "combined_tool") {
+
       // Render combined tool message
       const key = `combined-${group.toolMessage.timestamp}-${group.index}`;
       return (

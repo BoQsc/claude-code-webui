@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useState, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronLeftIcon, HomeIcon } from "@heroicons/react/24/outline";
-import { getClaudeProjectsUrl, getClaudeProjectConversationsUrl } from "../config/api";
+import { getClaudeProjectsUrl, getClaudeProjectConversationsUrl, getProjectsUrl } from "../config/api";
 import type {
   ChatRequest,
   ChatMessage,
@@ -21,7 +21,7 @@ import { HistoryButton } from "./chat/HistoryButton";
 import { ChatInput } from "./chat/ChatInput";
 import { ChatMessages } from "./chat/ChatMessages";
 import { HistoryView } from "./HistoryView";
-import { getChatUrl } from "../config/api";
+import { getChatUrl, getSessionPersistUrl } from "../config/api";
 import { KEYBOARD_SHORTCUTS } from "../utils/constants";
 import type { StreamingContext } from "../hooks/streaming/useMessageProcessor";
 import ProjectsSidebar from "./sidebar/ProjectsSidebar";
@@ -73,6 +73,7 @@ export function ChatPage() {
     fullTitle: string;
     projectEncodedName: string;
   } | null>(null);
+  const [sessionState, setSessionState] = useState<'new' | 'active' | 'persisted'>('new');
   // State for uploaded images
   const [uploadedImages, setUploadedImages] = useState<ImageData[]>([]);
 
@@ -114,11 +115,39 @@ export function ChatPage() {
     return project?.path;
   }, [location.pathname, projects]);
 
-  // Get current view and sessionId from query parameters
+  // Get current view from query parameters and sessionId from URL path
   const currentView = searchParams.get("view");
-  const sessionId = searchParams.get("sessionId");
   const isHistoryView = currentView === "history";
+
+  // Extract sessionId from URL path or query parameters
+  // Supports both formats:
+  // - Path format: /projects/project-name/conversations/session-id
+  // - Query format: /projects/project-name?sessionId=session-id
+  const sessionId = useMemo(() => {
+    // First try to get from URL path (future format)
+    const pathParts = location.pathname.split("/").filter(Boolean);
+    const conversationsIndex = pathParts.indexOf("conversations");
+    if (conversationsIndex !== -1 && conversationsIndex + 1 < pathParts.length) {
+      return pathParts[conversationsIndex + 1];
+    }
+
+    // Fallback to query parameter (current format)
+    const sessionIdParam = searchParams.get("sessionId");
+    if (sessionIdParam) {
+      return sessionIdParam;
+    }
+
+    return null;
+  }, [location.pathname, searchParams]);
+
   const isLoadedConversation = !!sessionId && !isHistoryView;
+
+  // Reset session state when starting a new conversation (no sessionId in URL)
+  useEffect(() => {
+    if (!sessionId) {
+      setSessionState('new');
+    }
+  }, [sessionId]);
 
   const { processStreamLine } = useClaudeStreaming();
   const { abortRequest, createAbortHandler } = useAbortController();
@@ -127,15 +156,38 @@ export function ChatPage() {
   const { permissionMode, setPermissionMode } = usePermissionMode();
 
   // Extract encoded name from URL for current project
+  // Helper function to encode project path (matching backend logic)
+  const encodeProjectPath = useCallback((projectPath: string): string => {
+    const normalizedPath = projectPath.replace(/\/$/, "");
+    // Claude converts '/', '\', ':', '.', and '_' to '-'
+    return normalizedPath.replace(/[/\\:._]/g, "-");
+  }, []);
+
   const encodedName = useMemo(() => {
-    // Use the working directory to find the matching project and get its encodedName
-    if (!workingDirectory || !projects.length) {
-      return null;
+    // Generate encoded name directly from URL path to avoid race condition with projects loading
+    const rawPath = location.pathname.replace("/projects", "");
+    if (!rawPath) return null;
+
+    // Extract the first path segment (could be encoded name or URL-encoded Windows path)
+    const pathParts = rawPath.split("/").filter(Boolean);
+    const firstSegment = pathParts[0];
+    if (!firstSegment) return null;
+
+    // Try to decode it as a URL-encoded Windows path
+    const decodedPath = decodeURIComponent(firstSegment);
+
+    // If it looks like a Windows path, convert it to encoded name format
+    if (decodedPath.includes(':')) {
+      // Convert "C:/Users/Windows10_new/Documents/quickstuff/quickstuff" to "C--Users-Windows10-new-Documents-quickstuff-quickstuff"
+      return decodedPath
+        .replace(/^([A-Z]):[\\/]/, "$1--")  // C:/ -> C--
+        .replace(/[\\/]/g, "-")             // / or \ -> -
+        .replace(/_/g, "-");                // _ -> - (for Windows10_new -> Windows10-new)
     }
 
-    const project = projects.find((p) => p.path === workingDirectory);
-    return project?.encodedName || null;
-  }, [workingDirectory, projects]);
+    // Otherwise, assume it's already an encoded name
+    return firstSegment;
+  }, [location.pathname]);
 
   // Load conversation history if sessionId is provided
   const {
@@ -172,6 +224,45 @@ export function ChatPage() {
     initialMessages: historyMessages,
     initialSessionId: loadedSessionId || undefined,
   });
+
+  // Enhanced session handler that only updates state (URL updates deferred until persistence)
+  const handleSessionIdUpdate = useCallback((newSessionId: string) => {
+    setCurrentSessionId(newSessionId);
+    setSessionState('active'); // Mark session as active when Claude generates a new ID
+    // URL updates will happen after session persistence to prevent race conditions
+  }, [setCurrentSessionId]);
+
+  // Function to persist session to disk and sync URL
+  const persistSession = useCallback(async (sessionIdToPersist: string) => {
+    if (!workingDirectory || !sessionIdToPersist) return;
+
+    try {
+      console.log(`Persisting session ${sessionIdToPersist} to disk...`);
+
+      const response = await fetch(getSessionPersistUrl(sessionIdToPersist), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workingDirectory })
+      });
+
+      if (response.ok) {
+        console.log(`Session ${sessionIdToPersist} successfully persisted`);
+        setSessionState('persisted'); // Mark session as persisted
+
+        // Now that session is persisted, safely update URL if session ID changed
+        if (sessionIdToPersist !== sessionId) {
+          console.log(`Updating URL with persisted session ID: ${sessionIdToPersist}`);
+          const newSearchParams = new URLSearchParams();
+          newSearchParams.set('sessionId', sessionIdToPersist);
+          navigate(`/projects/${encodeURIComponent(workingDirectory)}?${newSearchParams.toString()}`, { replace: true });
+        }
+      } else {
+        console.warn(`Failed to persist session ${sessionIdToPersist}:`, await response.text());
+      }
+    } catch (error) {
+      console.error(`Error persisting session ${sessionIdToPersist}:`, error);
+    }
+  }, [workingDirectory, sessionId, navigate, setSessionState]);
 
   const {
     allowedTools,
@@ -274,7 +365,7 @@ export function ChatPage() {
           setCurrentAssistantMessage,
           addMessage,
           updateLastMessage,
-          onSessionId: setCurrentSessionId,
+          onSessionId: handleSessionIdUpdate,
           shouldShowInitMessage: () => !hasShownInitMessage,
           onInitMessageShown: () => setHasShownInitMessage(true),
           get hasReceivedInit() {
@@ -315,6 +406,11 @@ export function ChatPage() {
         });
       } finally {
         resetRequestState();
+
+        // Persist session after successful response
+        if (currentSessionId) {
+          setTimeout(() => persistSession(currentSessionId), 1000); // Small delay to ensure streaming is fully complete
+        }
       }
     },
     [
@@ -341,6 +437,7 @@ export function ChatPage() {
       createAbortHandler,
       uploadedImages,
       setUploadedImages,
+      persistSession,
     ],
   );
 
@@ -500,10 +597,14 @@ export function ChatPage() {
   useEffect(() => {
     const loadProjects = async () => {
       try {
-        const response = await fetch(getClaudeProjectsUrl());
+        console.log("Loading projects from:", getProjectsUrl());
+        const response = await fetch(getProjectsUrl());
         if (response.ok) {
           const data = await response.json();
+          console.log("Projects loaded:", data.projects?.length || 0);
           setProjects(data.projects || []);
+        } else {
+          console.error("Failed to fetch projects:", response.status);
         }
       } catch (error) {
         console.error("Failed to load projects:", error);

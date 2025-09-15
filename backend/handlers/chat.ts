@@ -3,6 +3,19 @@ import { query, type PermissionMode, type SDKUserMessage } from "@anthropic-ai/c
 import type { ChatRequest, StreamResponse, MultimodalMessage, ImageData } from "../../shared/types.ts";
 import { logger } from "../utils/logger.ts";
 import { getPlatform } from "../utils/os.ts";
+import { storeSystemMessage } from "../history/systemMessageStore.ts";
+import { validateEncodedProjectName } from "../history/pathUtils.ts";
+
+/**
+ * Encode a project path to the format used by Claude CLI
+ * Based on logic from pathUtils.ts getEncodedProjectName
+ */
+function encodeProjectName(projectPath: string): string {
+  // Convert project path to encoded format for comparison
+  const normalizedPath = projectPath.replace(/\/$/, "");
+  // Claude converts '/', '\', ':', '.', and '_' to '-'
+  return normalizedPath.replace(/[/\\:._]/g, "-");
+}
 
 /**
  * Gets the runtime type for Claude SDK
@@ -104,6 +117,10 @@ async function* executeClaudeCommand(
     abortController = new AbortController();
     requestAbortControllers.set(requestId, abortController);
 
+    // System message tracking for persistence
+    let messagePosition = 0;
+    const encodedProjectName = workingDirectory ? encodeProjectName(workingDirectory) : null;
+
     const runtimeType = getRuntimeType();
     const queryOptions = {
       abortController,
@@ -132,6 +149,22 @@ async function* executeClaudeCommand(
         options: queryOptions,
       })) {
         logger.chat.debug("Claude SDK Message: {sdkMessage}", { sdkMessage });
+
+        // Store system messages for later retrieval during history loading
+        // Use the system message's own session_id if it has one (for new sessions),
+        // otherwise use the conversation's session ID
+        const systemSessionId = (sdkMessage.type === "system" && sdkMessage.session_id)
+          ? sdkMessage.session_id
+          : sessionId;
+
+        if (sdkMessage.type === "system" && systemSessionId && encodedProjectName) {
+          await storeSystemMessage(encodedProjectName, systemSessionId, sdkMessage, messagePosition, sdkMessage.subtype || "system");
+          logger.chat.debug("Storing system message for session: {sessionId}", { sessionId: systemSessionId });
+        }
+
+        // Increment position counter for every message processed
+        messagePosition++;
+
         yield {
           type: "claude_json",
           data: sdkMessage,
@@ -151,6 +184,22 @@ async function* executeClaudeCommand(
         options: queryOptions,
       })) {
         logger.chat.debug("Claude SDK Message: {sdkMessage}", { sdkMessage });
+
+        // Store system messages for later retrieval during history loading
+        // Use the system message's own session_id if it has one (for new sessions),
+        // otherwise use the conversation's session ID
+        const systemSessionId = (sdkMessage.type === "system" && sdkMessage.session_id)
+          ? sdkMessage.session_id
+          : sessionId;
+
+        if (sdkMessage.type === "system" && systemSessionId && encodedProjectName) {
+          await storeSystemMessage(encodedProjectName, systemSessionId, sdkMessage, messagePosition, sdkMessage.subtype || "system");
+          logger.chat.debug("Storing system message for session: {sessionId}", { sessionId: systemSessionId });
+        }
+
+        // Increment position counter for every message processed
+        messagePosition++;
+
         yield {
           type: "claude_json",
           data: sdkMessage,

@@ -79,19 +79,49 @@ export function useHistoryLoader(): HistoryLoaderResult {
           throw new Error("Invalid conversation history format");
         }
 
-        // Convert unknown[] to TimestampedSDKMessage[] with type checking
+        // Convert unknown[] to TimestampedSDKMessage[] with type checking and timestamp fallbacks
         const timestampedMessages: TimestampedSDKMessage[] = [];
         for (const msg of conversationHistory.messages) {
           if (isTimestampedSDKMessage(msg)) {
             timestampedMessages.push(msg);
+          } else if (typeof msg === "object" && msg !== null && "type" in msg) {
+            // Handle messages without timestamps by adding fallback timestamp
+            console.log("Adding fallback timestamp to message:", msg.type, (msg as any).subtype || 'no subtype');
+            const messageWithTimestamp = {
+              ...msg,
+              timestamp: new Date().toISOString(), // Fallback timestamp
+            } as TimestampedSDKMessage;
+            timestampedMessages.push(messageWithTimestamp);
           } else {
             console.warn("Skipping invalid message in history:", msg);
           }
         }
 
+        // Limit large conversations to prevent browser crashes
+        const MAX_INITIAL_MESSAGES = 100;
+        let messagesToProcess = timestampedMessages;
+
+        if (timestampedMessages.length > MAX_INITIAL_MESSAGES) {
+          console.log(`Large conversation detected (${timestampedMessages.length} messages). Loading most recent ${MAX_INITIAL_MESSAGES} messages to prevent browser crashes.`);
+          // Take the most recent messages (end of array)
+          messagesToProcess = timestampedMessages.slice(-MAX_INITIAL_MESSAGES);
+        }
+
         // Convert to frontend message format
-        const convertedMessages =
-          convertConversationHistory(timestampedMessages);
+        console.log(`🔍 Converting ${messagesToProcess.length} messages to frontend format...`);
+        console.log("Messages by type before conversion:", messagesToProcess.reduce((acc, msg) => {
+          const key = msg.type + (msg.subtype ? `:${msg.subtype}` : '');
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {}));
+        const convertedMessages = convertConversationHistory(messagesToProcess);
+        console.log(`✅ Converted to ${convertedMessages.length} frontend messages`);
+        console.log("Converted messages by type:", convertedMessages.reduce((acc, msg) => {
+          const key = msg.type;
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {}));
+
 
         setState((prev) => ({
           ...prev,
@@ -133,19 +163,28 @@ export function useHistoryLoader(): HistoryLoaderResult {
 
 /**
  * Hook for loading conversation history on mount when sessionId is provided
+ * Prevents reloading during active conversation to avoid race conditions
  */
 export function useAutoHistoryLoader(
   encodedProjectName?: string,
   sessionId?: string,
 ): HistoryLoaderResult {
   const historyLoader = useHistoryLoader();
+  const [lastLoadedSessionId, setLastLoadedSessionId] = useState<string | undefined>();
 
   useEffect(() => {
     if (encodedProjectName && sessionId) {
-      historyLoader.loadHistory(encodedProjectName, sessionId);
+      // Only load if this is a different session than what we last loaded
+      // This prevents reloading when session ID changes during an active conversation
+      if (sessionId !== lastLoadedSessionId) {
+        console.log(`Loading history for session: ${sessionId} (previous: ${lastLoadedSessionId})`);
+        historyLoader.loadHistory(encodedProjectName, sessionId);
+        setLastLoadedSessionId(sessionId);
+      }
     } else if (!sessionId) {
       // Only clear if there's no sessionId - don't clear while waiting for encodedProjectName
       historyLoader.clearHistory();
+      setLastLoadedSessionId(undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [encodedProjectName, sessionId]);

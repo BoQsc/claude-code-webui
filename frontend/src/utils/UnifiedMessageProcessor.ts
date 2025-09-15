@@ -2,6 +2,7 @@ import type {
   AllMessage,
   ChatMessage,
   ThinkingMessage,
+  SystemMessage,
   SDKMessage,
   TimestampedSDKMessage,
 } from "../types";
@@ -280,11 +281,25 @@ export class UnifiedMessageProcessor {
     message: Extract<SDKMessage | TimestampedSDKMessage, { type: "system" }>,
     context: ProcessingContext,
     options: ProcessingOptions,
-  ): void {
+  ): SystemMessage | null {
     const timestamp = options.timestamp || Date.now();
 
-    // Check if this is an init message and if we should show it (streaming only)
-    if (options.isStreaming && message.subtype === "init") {
+    // Extract session_id from system init messages (for streaming)
+    if (options.isStreaming && message.subtype === "init" && message.session_id && context.onSessionId) {
+      console.log(`🔧 Extracting session_id from system init message: ${message.session_id}`);
+      context.onSessionId(message.session_id);
+    }
+
+    // For history loading (non-streaming), always show all system messages
+    if (!options.isStreaming) {
+      const systemMessage = convertSystemMessage(message, timestamp);
+      context.addMessage(systemMessage);
+      console.log(`🔧 Processed system message for history loading:`, { type: message.type, subtype: message.subtype, timestamp });
+      return systemMessage;
+    }
+
+    // For streaming mode, check if this is an init message and if we should show it
+    if (message.subtype === "init") {
       // Mark that we've received init
       context.setHasReceivedInit?.(true);
 
@@ -293,12 +308,18 @@ export class UnifiedMessageProcessor {
         const systemMessage = convertSystemMessage(message, timestamp);
         context.addMessage(systemMessage);
         context.onInitMessageShown?.();
+        console.log(`🔧 Processed init system message for streaming:`, { type: message.type, subtype: message.subtype });
+        return systemMessage;
       }
     } else {
-      // Always show non-init system messages
+      // Always show non-init system messages in streaming mode
       const systemMessage = convertSystemMessage(message, timestamp);
       context.addMessage(systemMessage);
+      console.log(`🔧 Processed non-init system message for streaming:`, { type: message.type, subtype: message.subtype });
+      return systemMessage;
     }
+
+    return null;
   }
 
   /**
@@ -486,8 +507,8 @@ export class UnifiedMessageProcessor {
 
     switch (message.type) {
       case "system":
-        this.processSystemMessage(message, context, finalOptions);
-        return [];
+        const systemMessage = this.processSystemMessage(message, context, finalOptions);
+        return systemMessage ? [systemMessage] : [];
 
       case "assistant":
         return this.processAssistantMessage(message, context, finalOptions);
@@ -538,6 +559,34 @@ export class UnifiedMessageProcessor {
       allMessages.push(...processedMessages);
     }
 
-    return allMessages;
+    // Deduplicate system messages - only remove consecutive duplicates or exact duplicates
+    // This preserves legitimate system messages that appear at different points in the conversation
+    const deduplicatedMessages: AllMessage[] = [];
+    let lastSystemMessage: SystemMessage | null = null;
+
+    for (const message of allMessages) {
+      if (message.type === 'system') {
+        const systemMsg = message as SystemMessage;
+
+        // Only skip if this is an exact duplicate of the immediately previous system message
+        // (same content, same timestamp, appearing consecutively)
+        if (lastSystemMessage &&
+            lastSystemMessage.content === systemMsg.content &&
+            lastSystemMessage.timestamp === systemMsg.timestamp) {
+          console.log('🔧 Skipping consecutive duplicate system message:', String(systemMsg.content).substring(0, 50));
+          continue; // Skip this duplicate
+        }
+
+        // This is either the first system message or different from the last one
+        deduplicatedMessages.push(message);
+        lastSystemMessage = systemMsg;
+      } else {
+        // Non-system message - always include and reset the last system message tracker
+        deduplicatedMessages.push(message);
+        lastSystemMessage = null;
+      }
+    }
+
+    return deduplicatedMessages;
   }
 }

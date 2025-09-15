@@ -10,6 +10,7 @@ import { processConversationMessages } from "./timestampRestore.ts";
 import { validateEncodedProjectName } from "./pathUtils.ts";
 import { readTextFile, exists } from "../utils/fs.ts";
 import { getHomeDir } from "../utils/os.ts";
+import { mergeSystemMessagesIntoHistory } from "./systemMessageStore.ts";
 
 /**
  * Load a specific conversation by session ID
@@ -39,7 +40,7 @@ export async function loadConversation(
 
   // Check if file exists before trying to read it
   if (!(await exists(filePath))) {
-    return null; // Session not found
+    return null; // No conversation file found
   }
 
   try {
@@ -91,11 +92,53 @@ async function parseConversationFile(
     sessionId,
   );
 
+  // System messages should not be filtered by inner session_id as this changes between conversations
+  // The session validation happens at the file level, not at the individual message level
+  const filteredMessages = processedMessages;
+
+  // Merge stored system messages back into the conversation history
+  const encodedProjectName = extractEncodedProjectName(filePath);
+  logger.history.debug(
+    `🔧 Before merging: conversation has ${filteredMessages.length} messages for session ${sessionId}`,
+  );
+  logger.history.debug(
+    `🔧 Loading system messages for project: ${encodedProjectName}, session: ${sessionId}`,
+  );
+  const messagesWithSystem = await mergeSystemMessagesIntoHistory(
+    encodedProjectName,
+    sessionId,
+    filteredMessages,
+  );
+  logger.history.debug(
+    `🔧 After merging: conversation has ${messagesWithSystem.length} messages for session ${sessionId}`,
+  );
+
   return {
     sessionId,
-    messages: processedMessages,
+    messages: messagesWithSystem,
     metadata,
   };
+}
+
+/**
+ * Extract encoded project name from conversation file path
+ */
+function extractEncodedProjectName(filePath: string): string {
+  // File path format: ~/.claude/projects/{encodedProjectName}/{sessionId}.jsonl
+  const pathParts = filePath.split("/");
+  const projectsIndex = pathParts.findIndex(part => part === "projects");
+  if (projectsIndex >= 0 && projectsIndex < pathParts.length - 1) {
+    return pathParts[projectsIndex + 1];
+  }
+
+  // Fallback for Windows paths
+  const windowsPathParts = filePath.split("\\");
+  const windowsProjectsIndex = windowsPathParts.findIndex(part => part === "projects");
+  if (windowsProjectsIndex >= 0 && windowsProjectsIndex < windowsPathParts.length - 1) {
+    return windowsPathParts[windowsProjectsIndex + 1];
+  }
+
+  throw new Error(`Could not extract encoded project name from path: ${filePath}`);
 }
 
 /**
